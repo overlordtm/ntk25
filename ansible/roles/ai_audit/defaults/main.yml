@@ -1,0 +1,59 @@
+---
+# roles/ai_audit/defaults/main.yml
+
+# Security tools configuration
+ai_audit_security_tools:
+  linpeas:
+    url: "https://github.com/peass-ng/PEASS-ng/releases/latest/download/linpeas.sh"
+    dest: "/tmp/linpeas.sh"
+    options: "-a -n -o /tmp/linpeas_output.txt"  # -a (all), -n (no colors), -o (output file)
+  sudo_killer:
+    url: "https://github.com/TH3xACE/SUDO_KILLER/archive/refs/heads/master.zip"
+    dest: "/tmp/sudo_killer.zip"
+    options: "-c -e -o /tmp/sudo_killer_output"  # -c (no color), -e (export), -o (output dir)
+  lynis:
+    install_from_package: true  # Set to false to use git
+    git_url: "https://github.com/CISOfy/lynis.git"
+    git_dest: "/opt/lynis"
+    options: "--quick --no-colors --report-file {{ ai_audit_report_path }}/raw/lynis_report.dat"
+  rkhunter:
+    install_from_package: true  # Set to false to use source
+    options: "--sk --check --rwo --no-mail-on-warning --report-warnings-only"
+
+# Proxy configuration (optional)
+ai_audit_use_proxy: false
+ai_audit_http_proxy: ""
+ai_audit_https_proxy: ""
+
+# Report configuration
+ai_audit_report_path: "/tmp/ai_audit"
+ai_audit_report_formats:
+  - json
+  - markdown
+
+# Global whitelist configuration applied to all hosts
+ai_audit_global_whitelist:
+  ips:
+    - "127.0.0.1"
+    - "::1"
+  users:
+    - "root"
+    - "ansible"
+  processes:
+    - "sshd"
+    - "systemd"
+    - "cron"
+    - "chronyd"
+
+# Host-specific whitelists (overridden by host_vars or group_vars)
+# These will be merged with the global whitelist
+ai_audit_host_whitelist: {}
+
+# Gemini AI configuration
+ai_audit_gemini_model: "gemini-2.5-pro"  # The model to use for analysis
+ai_audit_gemini_api_endpoint: "https://generativelanguage.googleapis.com/v1/models"
+ai_audit_gemini_max_retries: 3
+ai_audit_gemini_retry_delay: 5  # seconds
+
+# Cleanup configuration
+ai_audit_cleanup_after_audit: true

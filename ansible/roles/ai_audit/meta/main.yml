@@ -1,0 +1,33 @@
+---
+# roles/gemini_security_audit/meta/main.yml
+galaxy_info:
+  author: Andraz Vrhovec
+  description: Security audit role using Gemini AI for Linux systems
+  company: lsslo
+  license: MIT
+  min_ansible_version: "2.11"
+  platforms:
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm    # Debian 12
+    - name: Ubuntu
+      versions:
+        - focal       # Ubuntu 20.04
+        - jammy       # Ubuntu 22.04
+        - noble       # Ubuntu 24.04
+    - name: EL
+      versions:
+        - "8"
+        - "9"         # Includes AlmaLinux 9
+    - name: AlmaLinux
+      versions:
+        - "9"
+  galaxy_tags:
+    - security
+    - audit
+    - ai
+    - gemini
+    - linpeas
+    - sudokiller
+dependencies: []

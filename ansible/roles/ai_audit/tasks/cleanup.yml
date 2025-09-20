@@ -1,0 +1,4 @@
+- name: cleanup | Cleanup reports
+  ansible.builtin.file:
+    path: "{{ ai_audit_report_path }}"
+    state: absent

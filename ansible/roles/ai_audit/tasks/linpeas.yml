@@ -1,0 +1,75 @@
+---
+# roles/ai_audit/tasks/linpeas.yml
+
+- name: Set LinPEAS file paths
+  ansible.builtin.set_fact:
+    ai_audit_linpeas_script: "{{ ai_audit_security_tools.linpeas.dest }}"
+    ai_audit_linpeas_output: "{{ ai_audit_report_path }}/raw/linpeas_output.txt"
+
+- name: Download LinPEAS
+  ansible.builtin.get_url:
+    url: "{{ ai_audit_security_tools.linpeas.url }}"
+    dest: "{{ ai_audit_linpeas_script }}"
+    mode: '0700'
+    force: true
+  environment: "{{ ai_audit_proxy_env | default({}) }}"
+  register: ai_audit_download_linpeas
+
+- name: Verify LinPEAS download
+  ansible.builtin.stat:
+    path: "{{ ai_audit_linpeas_script }}"
+  register: ai_audit_linpeas_script_stat
+
+- name: Check LinPEAS download
+  ansible.builtin.fail:
+    msg: "Failed to download LinPEAS from {{ ai_audit_security_tools.linpeas.url }}"
+  when: not ai_audit_linpeas_script_stat.stat.exists
+
+- name: Run the actual LinPEAS script directly
+  ansible.builtin.shell: |
+    chmod +x {{ ai_audit_linpeas_script }}
+    mkdir -p {{ ai_audit_report_path }}/raw
+    export LC_ALL=C
+    {{ ai_audit_linpeas_script }} -a -n | tee {{ ai_audit_linpeas_output }}
+  args:
+    executable: /bin/bash
+  register: ai_audit_linpeas_run
+  changed_when: ai_audit_linpeas_run.rc == 0
+  failed_when: false  # Never fail the task
+  ignore_errors: true
+
+- name: Create empty LinPEAS output file if it doesn't exist
+  ansible.builtin.stat:
+    path: "{{ ai_audit_linpeas_output }}"
+  register: ai_audit_linpeas_output_check
+
+- name: Create empty LinPEAS output file if it doesn't exist
+  ansible.builtin.file:
+    path: "{{ ai_audit_linpeas_output }}"
+    state: touch
+    mode: '0644'
+  when: not ai_audit_linpeas_output_check.stat.exists | default(false)
+
+- name: Check LinPEAS output file size
+  ansible.builtin.stat:
+    path: "{{ ai_audit_linpeas_output }}"
+  register: ai_audit_linpeas_size
+
+- name: Debug LinPEAS output size
+  ansible.builtin.debug:
+    msg: "LinPEAS output file size is {{ ai_audit_linpeas_size.stat.size | default(0) }} bytes"
+
+- name: Capture LinPEAS output from stdout if file is empty or too small
+  ansible.builtin.copy:
+    content: "{{ ai_audit_linpeas_run.stdout | default('LinPEAS run failed, no output generated') }}"
+    dest: "{{ ai_audit_linpeas_output }}"
+  when: 
+    - ai_audit_linpeas_run is defined
+    - ai_audit_linpeas_run.stdout is defined
+    - ai_audit_linpeas_size.stat.size is defined
+    - ai_audit_linpeas_size.stat.size < 100
+  ignore_errors: true
+
+- name: Notify LinPEAS completed
+  ansible.builtin.debug:
+    msg: "LinPEAS scan completed for {{ inventory_hostname }} (output size: {{ ai_audit_linpeas_size.stat.size | default(0) }} bytes)"

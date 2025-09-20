@@ -1,0 +1,108 @@
+- name: Slurp system_info output
+  ansible.builtin.slurp:
+    src: "{{ ai_audit_system_info_file }}"
+  register: ai_audit_system_info_content
+
+- name: Slurp lynis output
+  ansible.builtin.slurp:
+    src: "{{ ai_audit_lynis_output }}"
+  register: ai_audit_lynis_output_content
+
+- name: Slurp linpeas output
+  ansible.builtin.slurp:
+    src: "{{ ai_audit_linpeas_output }}"
+  register: ai_audit_linpeas_output_content
+
+- name: Slurp rkhunter output
+  ansible.builtin.slurp:
+    src: "{{ ai_audit_rkhunter_output }}"
+  register: ai_audit_rkhunter_output_content
+
+- name: Set hostname fact
+  ansible.builtin.set_fact:
+    ai_audit_hostname: "{{ inventory_hostname }}"
+
+- name: Set prompt to fact
+  ansible.builtin.set_fact:
+    ai_audit_prompt: |
+      Analyze the following two security reports from {{ ai_audit_hostname }}. 
+      Identify overlapping findings, critical vulnerabilities, and recommended remediation steps based *only* on the provided text.
+      Use concrete examples from that machine, do not write general descriptions and recommendations.
+
+      System info:
+      ```
+      {{ ai_audit_system_info_content.content | b64decode }}
+      ```
+
+      Lynis report:
+      ```
+      {{ ai_audit_lynis_output_content.content | b64decode }}
+      ```
+
+      Linpeas report:
+      ```
+      {{ ai_audit_linpeas_output_content.content | b64decode }}
+      ```
+
+      Rkhunter report:
+      ```
+      {{ ai_audit_rkhunter_output_content.content | b64decode }}
+      ```
+
+      Please provide a summary of the findings, critical vulnerabilities, and recommended remediation steps.
+
+      Look for services that are running with root permissions, have weak credentials, or are accessible without authentication.
+      Look for network services that are bound to all interfaces, have weak credentials, or are accessible without authentication.
+      Look for files that are world-writable, have weak credentials, or are accessible without authentication.
+      Look for default passwords, usually default password is Admin1Admin1, but alert of any default credentials you notice
+      Loof for softlinks, if there are any suspicious softlinks
+      Look for any files with weak permissions
+
+      Ignore accounts:
+        - uporabnik
+        - avtomatika
+        - gt
+        - splunkfwd
+      Also ignore IP 100.101.0.6 as it is scoring bot. 
+
+      if possible, provide example ansible tasks to remediate these findings. Use modern ansible with FQCNs. Do not write general tasks, use paths and data from this specific machine.
+
+      When generating firewall rules, use nftables file syntax. Just provide lines to be added to .nft file.
+
+      Provide markdown formatted report with following sections:
+        - Summary
+        - Misconfigurations with ansible mitigations
+        - Vulnerabilities with ansible mitigations
+        - General recommendations to increase security of host
+
+      Order everything by severity: Critical, High, Medium and Low
+        
+      Title of report should be: AI audit {{ ai_audit_hostname }}
+
+- name: Ensure prompt dir
+  ansible.builtin.file:
+    state: directory
+    path: "{{ playbook_dir }}/ai_audit/"
+    mode: "0755"
+
+- name: Save prompt to local machine
+  ansible.builtin.copy:
+    content: "{{ ai_audit_prompt }}"
+    dest: "{{ playbook_dir }}/ai_audit/{{ ai_audit_hostname }}.prompt.txt"
+    mode: '0644'
+
+- name: Debug
+  ansible.builtin.debug:
+    var: ai_audit_prompt
+
+- name: Generate combined security analysis
+  delegate_to: localhost
+  become: false
+  gemini:
+    api_key: "{{ lookup('env', 'GEMINI_API_KEY') }}"
+    model_name: "gemini-2.5-pro" # Using a more powerful model
+    raw_json_output: false
+    prompt: "{{ ai_audit_prompt }}"
+    max_output_tokens: 10240
+    temperature: 0.0 # More factual
+  register: combined_analysis

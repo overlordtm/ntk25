@@ -1,0 +1,12 @@
+---
+# roles/ai_audit/vars/default.yml
+
+# Default package names (fallback)
+ai_audit_lynis_package_name: lynis
+ai_audit_rkhunter_package_name: rkhunter
+
+# Default package manager command
+ai_audit_pkg_update_cmd: true
+
+# Default system paths
+ai_audit_system_audit_log: /var/log/audit.log

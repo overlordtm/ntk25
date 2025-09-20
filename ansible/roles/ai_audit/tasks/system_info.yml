@@ -1,0 +1,229 @@
+---
+# roles/ai_audit/tasks/system_info.yml
+
+- name: Set system info file path
+  ansible.builtin.set_fact:
+    ai_audit_system_info_file: "{{ ai_audit_report_path }}/raw/system_info.txt"
+
+- name: Create system info output directory
+  ansible.builtin.file:
+    path: "{{ ai_audit_report_path }}/raw"
+    state: directory
+    mode: '0750'
+
+- name: Collect hostname information
+  ansible.builtin.shell: "echo 'HOSTNAME: $(hostname)' > {{ ai_audit_system_info_file }}"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Collect kernel information
+  ansible.builtin.shell: "echo 'KERNEL: $(uname -a)' >> {{ ai_audit_system_info_file }}"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Collect OS version
+  ansible.builtin.shell: "echo 'OS VERSION: $(cat /etc/os-release | grep PRETTY_NAME | cut -d \"=\" -f 2 | tr -d \"\\\"\" )' >> {{ ai_audit_system_info_file }}"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Collect IP address information
+  ansible.builtin.shell: |
+    echo "IP ADDRESSES:" >> {{ ai_audit_system_info_file }}
+    ip addr show | grep "inet " | awk '{print $2}' >> {{ ai_audit_system_info_file }}
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Collect logged-in users
+  ansible.builtin.shell: |
+    echo -e "\nLOGGED IN USERS:" >> {{ ai_audit_system_info_file }}
+    who >> {{ ai_audit_system_info_file }}
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Collect sudoers configuration
+  ansible.builtin.shell: |
+    echo -e "\nSUDOERS CONFIG:" >> {{ ai_audit_system_info_file }}
+    cat /etc/sudoers /etc/sudoers.d/* 2>/dev/null >> {{ ai_audit_system_info_file }} || echo "Could not read sudoers files" >> {{ ai_audit_system_info_file }}
+  args:
+    executable: /bin/bash
+  changed_when: false
+  ignore_errors: true
+
+- name: Collect cron jobs
+  ansible.builtin.shell: |
+    echo -e "\nCRON JOBS:" >> {{ ai_audit_system_info_file }}
+    for user in $(cat /etc/passwd | cut -d: -f1); do 
+      echo "CRON for $user:" >> {{ ai_audit_system_info_file }}
+      crontab -l -u $user 2>/dev/null >> {{ ai_audit_system_info_file }} || echo "No cron for $user" >> {{ ai_audit_system_info_file }}
+    done
+  args:
+    executable: /bin/bash
+  changed_when: false
+  ignore_errors: true
+
+- name: Collect system cron information
+  ansible.builtin.shell: |
+    echo -e "\nSYSTEM CRON:" >> {{ ai_audit_system_info_file }}
+    ls -la /etc/cron* >> {{ ai_audit_system_info_file }} 2>/dev/null || true
+  args:
+    executable: /bin/bash
+  changed_when: false
+  ignore_errors: true
+
+- name: Collect listening services
+  ansible.builtin.shell: |
+    echo -e "\nLISTENING SERVICES:" >> {{ ai_audit_system_info_file }}
+    ss -tulpn >> {{ ai_audit_system_info_file }} 2>/dev/null || netstat -tulpn >> {{ ai_audit_system_info_file }} 2>/dev/null || echo "No ss or netstat command found" >> {{ ai_audit_system_info_file }}
+  args:
+    executable: /bin/bash
+  changed_when: false
+  ignore_errors: true
+
+- name: Collect running processes
+  ansible.builtin.shell: |
+    echo -e "\nRUNNING PROCESSES:" >> {{ ai_audit_system_info_file }}
+    ps aux >> {{ ai_audit_system_info_file }}
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Collect mounted filesystems information
+  ansible.builtin.shell: |
+    echo -e "\nMOUNTED FILESYSTEMS:" >> {{ ai_audit_system_info_file }}
+    df -h >> {{ ai_audit_system_info_file }}
+    echo -e "\nFSTAB ENTRIES:" >> {{ ai_audit_system_info_file }}
+    cat /etc/fstab >> {{ ai_audit_system_info_file }}
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Collect installed packages
+  ansible.builtin.shell: |
+    echo -e "\nINSTALLED PACKAGES:" >> {{ ai_audit_system_info_file }}
+    if command -v dpkg >/dev/null 2>&1; then
+      dpkg -l >> {{ ai_audit_system_info_file }}
+    elif command -v rpm >/dev/null 2>&1; then
+      rpm -qa >> {{ ai_audit_system_info_file }}
+    else
+      echo "Could not determine package manager" >> {{ ai_audit_system_info_file }}
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Collect password and shadow information
+  ansible.builtin.shell: |
+    echo -e "\nPASSWORD FILE:" >> {{ ai_audit_system_info_file }}
+    cat /etc/passwd >> {{ ai_audit_system_info_file }}
+    echo -e "\nGROUP FILE:" >> {{ ai_audit_system_info_file }}
+    cat /etc/group >> {{ ai_audit_system_info_file }}
+    echo -e "\nSHADOW FILE INFO (no passwords):" >> {{ ai_audit_system_info_file }}
+    getent shadow | cut -d: -f1,3,4,5,6,7,8,9 >> {{ ai_audit_system_info_file }}
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Collect SUID/SGID file information
+  ansible.builtin.shell: |
+    echo -e "\nSUID FILES:" >> {{ ai_audit_system_info_file }}
+    find / -type f -perm -4000 -ls 2>/dev/null >> {{ ai_audit_system_info_file }} || true
+    echo -e "\nSGID FILES:" >> {{ ai_audit_system_info_file }}
+    find / -type f -perm -2000 -ls 2>/dev/null >> {{ ai_audit_system_info_file }} || true
+  args:
+    executable: /bin/bash
+  changed_when: false
+  failed_when: false
+  ignore_errors: true
+
+- name: Collect firewall rules
+  ansible.builtin.shell: |
+    echo -e "\nFIREWALL RULES:" >> {{ ai_audit_system_info_file }}
+    nft list ruleset >> {{ ai_audit_system_info_file }} 2>/dev/null || true
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Search /etc, /srv, /opt, /home for files containing the keyword "password" and "Admin1Admin1" (case-insensitive)
+  ansible.builtin.shell: |
+    find /etc /srv /opt /home -type f -print0 | xargs -0 grep -iHl '(password|Admin1Admin1)' || true
+  args:
+    executable: /bin/bash
+  register: ai_audit_password_files_result
+  changed_when: false
+  failed_when: false # Don't fail if grep returns non-zero (e.g., no files found)
+
+- name: Collect password files
+  ansible.builtin.shell: |
+    echo -e "\nPASSWORD FILES:" >> {{ ai_audit_system_info_file }}
+    echo "{{ ai_audit_password_files_result.stdout | default('None') }}" >> {{ ai_audit_system_info_file }}
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+# broken, commented out
+# - name: Find all softlinks on system and collect them
+#   ansible.builtin.find:
+#     paths:
+#       - /boot
+#       - /usr
+#       - /bin
+#       - /opt
+#       - /sbin
+#       - /lib
+#       - /lib64
+#       - /lib32
+#       - /var
+#       - /home
+#       - /root
+#       - /srv
+#     file_type: link
+#     recurse: true
+#   register: ai_audit_softlinks
+
+# - name: Collect softlinks
+#   ansible.builtin.shell: |
+#     echo -e "\nSOFTLINKS:" >> {{ ai_audit_system_info_file }}
+#     echo {{ ai_audit_softlinks.files | map('attr', 'path') | map('quote') | join(' ') }} | xargs ls -ld >> {{ ai_audit_system_info_file }}
+#   args:
+#     executable: /bin/bash
+#   changed_when: false
+
+- name: Collect Apache configuration files
+  ansible.builtin.shell: |
+    echo -e "\nAPACHE CONFIGURATION:" >> {{ ai_audit_system_info_file }}
+    if [ -d /etc/apache2 ]; then
+      echo "Apache config found in /etc/apache2" >> {{ ai_audit_system_info_file }}
+      find /etc/apache2 -name "*.conf" -type f -exec echo "File: {}" \; -exec cat {} \; >> {{ ai_audit_system_info_file }} 2>/dev/null || true
+    elif [ -d /etc/httpd ]; then
+      echo "Apache config found in /etc/httpd" >> {{ ai_audit_system_info_file }}
+      find /etc/httpd -name "*.conf" -type f -exec echo "File: {}" \; -exec cat {} \; >> {{ ai_audit_system_info_file }} 2>/dev/null || true
+    else
+      echo "No Apache configuration found" >> {{ ai_audit_system_info_file }}
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+  ignore_errors: true
+
+- name: Collect Nginx configuration files
+  ansible.builtin.shell: |
+    echo -e "\nNGINX CONFIGURATION:" >> {{ ai_audit_system_info_file }}
+    if [ -d /etc/nginx ]; then
+      echo "Nginx config found in /etc/nginx" >> {{ ai_audit_system_info_file }}
+      find /etc/nginx -name "*.conf" -type f -exec echo "File: {}" \; -exec cat {} \; >> {{ ai_audit_system_info_file }} 2>/dev/null || true
+    else
+      echo "No Nginx configuration found" >> {{ ai_audit_system_info_file }}
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+  ignore_errors: true
+
+- name: Notify system information collection completed
+  ansible.builtin.debug:
+    msg: "System information collection completed for {{ inventory_hostname }}"

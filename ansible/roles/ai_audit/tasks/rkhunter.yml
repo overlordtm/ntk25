@@ -1,0 +1,185 @@
+---
+# roles/ai_audit/tasks/rkhunter.yml
+
+- name: Set OS-specific variables for Rkhunter
+  ansible.builtin.include_vars: "{{ lookup('first_found', OS_vars_files) }}"
+  vars:
+    OS_vars_files:
+      - "vars/{{ ansible_distribution | lower }}_{{ ansible_distribution_major_version }}.yml"
+      - "vars/{{ ansible_distribution | lower }}.yml"
+      - "vars/{{ ansible_os_family | lower }}.yml"
+      - "vars/default.yml"
+
+- name: Set Rkhunter file paths
+  ansible.builtin.set_fact:
+    ai_audit_rkhunter_output: "{{ ai_audit_report_path }}/raw/rkhunter_output.txt"
+    ai_audit_rkhunter_log: "/var/log/rkhunter.log"
+
+# Install Rkhunter - Package Manager Method
+- name: Install Rkhunter from package manager
+  ansible.builtin.package:
+    name: "{{ ai_audit_rkhunter_package_name }}"
+    state: present
+  register: ai_audit_install_rkhunter
+  until: ai_audit_install_rkhunter is success
+  retries: 3
+  delay: 5
+  become: true
+  when: ai_audit_security_tools.rkhunter.install_from_package | bool
+
+# Update Rkhunter if needed
+
+- name: Check for available web commands (curl and wget)
+  ansible.builtin.command: "which {{ item }}"
+  register: web_command_paths
+  ignore_errors: yes # Don't stop if a command isn't found
+  changed_when: false # 'which' command doesn't change system state
+  failed_when: false # Explicitly mark as not failed even on rc != 0
+  loop:
+    - curl
+    - wget
+
+- name: Determine the rkhunter WEB_CMD path
+  ansible.builtin.set_fact:
+    rkhunter_web_cmd: |
+      {% set curl_path = web_command_paths.results | selectattr('item', 'equalto', 'curl') | first %}
+      {% set wget_path = web_command_paths.results | selectattr('item', 'equalto', 'wget') | first %}
+      {% if curl_path and curl_path.rc == 0 %}
+        {{ curl_path.stdout }}
+      {% elif wget_path and wget_path.rc == 0 %}
+        {{ wget_path.stdout }}
+      {% else %}
+        {{ omit }} # Use omit if neither is found, so the variable is not defined
+      {% endif %}
+
+- name: Configure rkhunter WEB_CMD in /etc/rkhunter.conf
+  ansible.builtin.lineinfile:
+    path: /etc/rkhunter.conf
+    regexp: '^WEB_CMD=' # Match the line starting with WEB_CMD=
+    line: 'WEB_CMD="{{ rkhunter_web_cmd }}"' # Set the new line with quotes around the path
+    owner: root
+    group: root
+    mode: '0644'
+    backup: yes # Create a backup of the original file
+  when: rkhunter_web_cmd is defined # Only run if a web command was found
+
+- name: Warn if neither curl nor wget were found for rkhunter WEB_CMD
+  ansible.builtin.debug:
+    msg: "Warning: Neither 'curl' nor 'wget' were found for rkhunter WEB_CMD"
+
+- name: Update Rkhunter database
+  ansible.builtin.shell: rkhunter --update
+  args:
+    executable: /bin/bash
+  register: ai_audit_rkhunter_update
+  changed_when: ai_audit_rkhunter_update.rc == 0
+  become: true
+  when: ai_audit_security_tools.rkhunter.install_from_package | bool
+  ignore_errors: true
+
+# Create Rkhunter configuration
+- name: Create temporary Rkhunter configuration
+  ansible.builtin.copy:
+    dest: "/tmp/rkhunter.conf.local"
+    content: |
+      # Temporary Rkhunter configuration for security audit
+      ALLOW_SSH_ROOT_USER=no
+      PKGMGR=DPKG
+      UPDATE_MIRRORS=1
+      MIRRORS_MODE=0
+      WEB_CMD=""
+      DISABLE_TESTS="suspscan hidden_procs deleted_files packet_cap_apps apps"
+      SCRIPTWHITELIST=/usr/bin/lwp-request
+      SCRIPTWHITELIST=/usr/bin/which
+      ALLOWHIDDENDIR=/dev/.udev
+      ALLOWHIDDENDIR=/dev/.mdadm
+      ALLOWHIDDENDIR=/dev/.systemd
+      ALLOWHIDDENDIR=/dev/.udev
+      ALLOWHIDDENDIR=/dev/.initramfs
+    mode: '0644'
+  register: ai_audit_rkhunter_conf
+  when: ai_audit_security_tools.rkhunter.install_from_package | bool
+
+# Run Rkhunter
+- name: Create Rkhunter command
+  ansible.builtin.set_fact:
+    ai_audit_rkhunter_cmd: "rkhunter --configfile /tmp/rkhunter.conf.local {{ ai_audit_security_tools.rkhunter.options }}"
+
+- name: Run Rkhunter scan
+  ansible.builtin.shell: "{{ ai_audit_rkhunter_cmd }} > {{ ai_audit_rkhunter_output }} 2>&1"
+  args:
+    executable: /bin/bash
+  register: ai_audit_rkhunter_run
+  changed_when: ai_audit_rkhunter_run.rc == 0
+  failed_when: false # Don't fail if rkhunter encounters issues
+  become: true
+  when: ai_audit_security_tools.rkhunter.install_from_package | bool
+  no_log: true  # Don't log output as it may contain sensitive information
+
+- name: Check if Rkhunter output exists
+  ansible.builtin.stat:
+    path: "{{ ai_audit_rkhunter_output }}"
+  register: ai_audit_rkhunter_output_stat
+  when: ai_audit_security_tools.rkhunter.install_from_package | bool
+
+- name: Copy system Rkhunter log if available
+  ansible.builtin.shell: "cat {{ ai_audit_rkhunter_log }} >> {{ ai_audit_rkhunter_output }}"
+  args:
+    executable: /bin/bash
+  register: ai_audit_copy_rkhunter_log
+  changed_when: false
+  failed_when: false  # Don't fail if log doesn't exist
+  become: true
+  when: 
+    - ai_audit_security_tools.rkhunter.install_from_package | bool
+    - ai_audit_rkhunter_output_stat.stat is defined
+    - ai_audit_rkhunter_output_stat.stat.exists
+
+- name: Create directory for rkhunter warnings
+  ansible.builtin.file:
+    path: "{{ ai_audit_report_path }}/raw"
+    state: directory
+    mode: '0750'
+  when: ai_audit_security_tools.rkhunter.install_from_package | bool
+
+- name: Extract warnings from Rkhunter output
+  ansible.builtin.shell: |
+    grep -i "warning\|found" {{ ai_audit_rkhunter_output }} | grep -v "No warnings found" > {{ ai_audit_report_path }}/raw/rkhunter_warnings.txt || echo "No warnings found" > {{ ai_audit_report_path }}/raw/rkhunter_warnings.txt
+  args:
+    executable: /bin/bash
+  register: ai_audit_extract_warnings
+  changed_when: false
+  become: true
+  when: 
+    - ai_audit_security_tools.rkhunter.install_from_package | bool
+    - ai_audit_rkhunter_output_stat.stat is defined
+    - ai_audit_rkhunter_output_stat.stat.exists
+
+- name: Count Rkhunter warnings
+  ansible.builtin.shell: |
+    grep -i "warning\|found" {{ ai_audit_rkhunter_output }} | grep -v "No warnings found" | wc -l
+  args:
+    executable: /bin/bash
+  register: ai_audit_rkhunter_warnings_count
+  changed_when: false
+  become: true
+  when: 
+    - ai_audit_security_tools.rkhunter.install_from_package | bool
+    - ai_audit_rkhunter_output_stat.stat is defined
+    - ai_audit_rkhunter_output_stat.stat.exists
+
+- name: Set Rkhunter warning count fact
+  ansible.builtin.set_fact:
+    ai_audit_rkhunter_warnings: "{{ ai_audit_rkhunter_warnings_count.stdout | default('0') }}"
+  when: ai_audit_security_tools.rkhunter.install_from_package | bool
+
+- name: Notify Rkhunter completed
+  ansible.builtin.debug:
+    msg: "Rkhunter scan completed for {{ inventory_hostname }} with {{ ai_audit_rkhunter_warnings }} warnings"
+  when: ai_audit_security_tools.rkhunter.install_from_package | bool
+
+- name: Cleanup Rkhunter temporary config
+  ansible.builtin.file:
+    path: "/tmp/rkhunter.conf.local"
+    state: absent
+  when: ai_audit_security_tools.rkhunter.install_from_package | bool

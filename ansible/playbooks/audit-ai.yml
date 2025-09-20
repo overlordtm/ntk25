@@ -1,0 +1,47 @@
+---
+# security_audit.yml
+
+- name: Perform AI-Powered Security Audit
+  hosts: all
+  gather_facts: true
+  become: true
+  
+  vars:
+    # Global settings for all hosts
+    ai_audit_report_path: "/var/security/audit"
+    ai_audit_cleanup_after_audit: true
+    
+    # Global whitelist applied to all hosts
+    ai_audit_global_whitelist:
+      ips:
+        - "127.0.0.1"
+        - "::1"
+        - "10.0.0.1"  # Company VPN endpoint
+      users:
+        - "root"
+        - "ansible"
+        - "admin"
+      processes:
+        - "sshd"
+        - "systemd"
+        - "cron"
+        - "prometheus-node-exporter"
+    
+    # Optional proxy settings
+    ai_audit_use_proxy: false
+    # ai_audit_http_proxy: "http://proxy.example.com:3128"
+    # ai_audit_https_proxy: "http://proxy.example.com:3128"
+  
+  environment:
+    GEMINI_API_KEY: "{{ lookup('env', 'GEMINI_API_KEY') }}"
+  
+  pre_tasks:
+    - name: Check for Gemini API key
+      ansible.builtin.fail:
+        msg: "No Gemini API key found. Please set GEMINI_API_KEY environment variable."
+      when: lookup('env', 'GEMINI_API_KEY') == ""
+      run_once: true
+  
+  roles:
+    - role: ai_audit
+  

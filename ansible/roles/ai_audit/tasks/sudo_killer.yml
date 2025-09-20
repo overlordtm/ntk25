@@ -1,0 +1,130 @@
+---
+# roles/ai_audit/tasks/sudo_killer.yml
+
+- name: Set SUDO_KILLER file paths
+  ansible.builtin.set_fact:
+    ai_audit_sudo_killer_zip: "/tmp/sudo_killer.zip"
+    ai_audit_sudo_killer_dir: "/tmp/SUDO_KILLER"
+    ai_audit_sudo_killer_script: "/tmp/SUDO_KILLER/sudo_killer.sh"
+    ai_audit_sudo_killer_output_dir: "{{ ai_audit_report_path }}/raw/sudo_killer_output"
+
+- name: Download SUDO_KILLER release zip
+  ansible.builtin.get_url:
+    url: "https://github.com/TH3xACE/SUDO_KILLER/archive/refs/heads/master.zip"
+    dest: "{{ ai_audit_sudo_killer_zip }}"
+    mode: '0644'
+    force: true
+  environment: "{{ ai_audit_proxy_env | default({}) }}"
+  register: ai_audit_download_sudo_killer
+
+- name: Check SUDO_KILLER download
+  ansible.builtin.fail:
+    msg: "Failed to download SUDO_KILLER from GitHub"
+  when: ai_audit_download_sudo_killer.failed is defined and ai_audit_download_sudo_killer.failed
+
+- name: Install unzip if not present
+  ansible.builtin.package:
+    name: unzip
+    state: present
+  become: true
+  register: ai_audit_install_unzip
+  retries: 3
+  delay: 5
+  until: ai_audit_install_unzip is success
+
+- name: Create SUDO_KILLER directory
+  ansible.builtin.file:
+    path: "{{ ai_audit_sudo_killer_dir }}"
+    state: directory
+    mode: '0750'
+
+- name: Extract SUDO_KILLER zip
+  ansible.builtin.unarchive:
+    src: "{{ ai_audit_sudo_killer_zip }}"
+    dest: "/tmp"
+    remote_src: true
+  register: ai_audit_extract_sudo_killer
+  ignore_errors: true
+
+- name: Check for SUDO_KILLER-master directory
+  ansible.builtin.stat:
+    path: "/tmp/SUDO_KILLER-master"
+  register: sudo_killer_master_dir
+
+- name: Move SUDO_KILLER files to correct location (if SUDO_KILLER-master exists)
+  ansible.builtin.shell: |
+    mkdir -p {{ ai_audit_sudo_killer_dir }}
+    cp -r /tmp/SUDO_KILLER-master/* {{ ai_audit_sudo_killer_dir }}/ || true
+    find {{ ai_audit_sudo_killer_dir }} -name "*.sh" -exec chmod 700 {} \; || true
+  args:
+    executable: /bin/bash
+  when: sudo_killer_master_dir.stat.exists | default(false)
+  register: ai_audit_move_sudo_killer
+  changed_when: ai_audit_move_sudo_killer.rc == 0
+  ignore_errors: true
+
+- name: Check for SUDO_KILLER script
+  ansible.builtin.stat:
+    path: "{{ ai_audit_sudo_killer_dir }}/sudo_killer.sh"
+  register: sudo_killer_script_exists
+
+- name: Create SUDO_KILLER output directory
+  ansible.builtin.file:
+    path: "{{ ai_audit_sudo_killer_output_dir }}"
+    state: directory
+    mode: '0750'
+
+- name: Create SUDO_KILLER options string
+  ansible.builtin.set_fact:
+    ai_audit_sudo_killer_cmd: "{{ ai_audit_sudo_killer_dir }}/sudo_killer.sh -c -e -o {{ ai_audit_sudo_killer_output_dir }}"
+  when: sudo_killer_script_exists.stat.exists | default(false)
+
+- name: Run SUDO_KILLER
+  ansible.builtin.shell: "{{ ai_audit_sudo_killer_cmd }}"
+  args:
+    executable: /bin/bash
+  register: ai_audit_sudo_killer_run
+  changed_when: ai_audit_sudo_killer_run.rc == 0
+  failed_when: false  # Never fail this task
+  when: 
+    - sudo_killer_script_exists.stat.exists | default(false)
+    - ai_audit_sudo_killer_cmd is defined
+  ignore_errors: true
+
+- name: Create a dummy file if SUDO_KILLER failed to run
+  ansible.builtin.copy:
+    content: |
+      SUDO_KILLER could not be run successfully.
+      This is a placeholder file to ensure the analysis can continue.
+      Please see Ansible logs for more details about the failure.
+    dest: "{{ ai_audit_report_path }}/raw/sudo_killer_aggregate.txt"
+    mode: '0640'
+  when: not sudo_killer_script_exists.stat.exists | default(false) or not ai_audit_sudo_killer_cmd is defined
+
+- name: Check if SUDO_KILLER output exists
+  ansible.builtin.stat:
+    path: "{{ ai_audit_sudo_killer_output_dir }}"
+    get_attributes: false
+    get_checksum: false
+    get_mime: false
+  register: ai_audit_sudo_killer_output_stat
+
+- name: Collect SUDO_KILLER results into a single file
+  ansible.builtin.shell: |
+    # Create an aggregate file of all output
+    mkdir -p {{ ai_audit_report_path }}/raw
+    if [ -d "{{ ai_audit_sudo_killer_output_dir }}" ]; then
+      find {{ ai_audit_sudo_killer_output_dir }} -type f -name "*.txt" -exec cat {} \; > {{ ai_audit_report_path }}/raw/sudo_killer_aggregate.txt || echo "SUDO_KILLER output processing failed" > {{ ai_audit_report_path }}/raw/sudo_killer_aggregate.txt
+    else
+      echo "SUDO_KILLER did not create any output directories" > {{ ai_audit_report_path }}/raw/sudo_killer_aggregate.txt
+    fi
+  args:
+    executable: /bin/bash
+  register: ai_audit_aggregate_sudo_killer
+  changed_when: ai_audit_aggregate_sudo_killer.rc == 0
+  ignore_errors: true
+  no_log: true
+
+- name: Notify SUDO_KILLER completed
+  ansible.builtin.debug:
+    msg: "SUDO_KILLER scan completed for {{ inventory_hostname }}"

@@ -1,0 +1,12 @@
+---
+# roles/ai_audit/vars/redhat.yml
+
+# Package names for RHEL/CentOS/AlmaLinux/Rocky Linux
+ai_audit_lynis_package_name: lynis
+ai_audit_rkhunter_package_name: rkhunter
+
+# Package manager command for update
+ai_audit_pkg_update_cmd: yum clean all && yum -y makecache
+
+# System-specific paths
+ai_audit_system_audit_log: /var/log/audit/audit.log

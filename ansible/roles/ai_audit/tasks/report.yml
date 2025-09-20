@@ -1,0 +1,19 @@
+---
+# roles/gemini_security_audit/tasks/report.yml
+
+- name: report | Ensure report directory exists
+  ansible.builtin.file:
+    path: "{{ playbook_dir }}/ai_audit"
+    state: directory
+    mode: '0750'
+  become: false
+  delegate_to: localhost
+
+- name: report | Save report to controller node
+  ansible.builtin.copy:
+    content: "{{ combined_analysis.result.text }}"
+    dest: "{{ playbook_dir }}/ai_audit/{{ ai_audit_hostname }}.md"
+    mode: '0644'
+  become: false
+  delegate_to: localhost
+

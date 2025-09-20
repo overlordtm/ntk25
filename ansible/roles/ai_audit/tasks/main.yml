@@ -1,0 +1,56 @@
+---
+# roles/ai_audit/tasks/main.yml
+
+- name: Merge global and host-specific whitelists
+  ansible.builtin.set_fact:
+    ai_audit_effective_whitelist:
+      ips: "{{ ai_audit_global_whitelist.ips | default([]) + ai_audit_host_whitelist.ips | default([]) | unique }}"
+      users: "{{ ai_audit_global_whitelist.users | default([]) + ai_audit_host_whitelist.users | default([]) | unique }}"
+      processes: "{{ ai_audit_global_whitelist.processes | default([]) + ai_audit_host_whitelist.processes | default([]) | unique }}"
+
+- name: Create necessary directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0750'
+  loop:
+    - "{{ ai_audit_report_path }}"
+    - "{{ ai_audit_report_path }}/raw"
+    - "{{ ai_audit_report_path }}/analysis"
+
+- name: Set proxy environment if needed
+  ansible.builtin.set_fact:
+    ai_audit_proxy_env:
+      http_proxy: "{{ ai_audit_http_proxy }}"
+      https_proxy: "{{ ai_audit_https_proxy }}"
+  when: ai_audit_use_proxy | bool
+
+- name: Check if API key is set
+  ansible.builtin.fail:
+    msg: "GEMINI_API_KEY environment variable is not set."
+  when: lookup('env', 'GEMINI_API_KEY') | length == 0
+
+- name: Gather system information
+  ansible.builtin.include_tasks: system_info.yml
+
+- name: Download and run LinPEAS
+  ansible.builtin.include_tasks: linpeas.yml
+
+- name: Download and run SUDO_KILLER
+  ansible.builtin.include_tasks: sudo_killer.yml
+  
+- name: Install and run Lynis
+  ansible.builtin.include_tasks: lynis.yml
+  
+- name: Install and run Rkhunter
+  ansible.builtin.include_tasks: rkhunter.yml
+
+- name: Analyze security data with Gemini AI
+  ansible.builtin.include_tasks: analyze.yml
+
+- name: Generate security reports
+  ansible.builtin.include_tasks: report.yml
+
+- name: Cleanup temporary files
+  ansible.builtin.include_tasks: cleanup.yml
+  when: ai_audit_cleanup_after_audit | bool

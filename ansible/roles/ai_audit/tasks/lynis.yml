@@ -1,0 +1,131 @@
+---
+# roles/ai_audit/tasks/lynis.yml
+
+- name: lynis | Set OS-specific variables
+  ansible.builtin.include_vars: "{{ lookup('first_found', OS_vars_files) }}"
+  vars:
+    OS_vars_files:
+      - "vars/{{ ansible_distribution | lower }}_{{ ansible_distribution_major_version }}.yml"
+      - "vars/{{ ansible_distribution | lower }}.yml"
+      - "vars/{{ ansible_os_family | lower }}.yml"
+      - "vars/default.yml"
+
+- name: lynis | Set Lynis file paths
+  ansible.builtin.set_fact:
+    ai_audit_lynis_output: "{{ ai_audit_report_path }}/raw/lynis_output.txt"
+    ai_audit_lynis_report: "{{ ai_audit_report_path }}/raw/lynis_report.dat"
+
+# Install Lynis - Package Manager Method
+
+- name: lynis | Enable epel-release
+  ansible.builtin.yum:
+    name: epel-release
+    state: present
+  when: ansible_os_family == "RedHat" and (ai_audit_security_tools.lynis.install_from_package | bool)
+
+- name: lynis | Install Lynis from package manager
+  ansible.builtin.package:
+    name: "{{ ai_audit_lynis_package_name }}"
+    state: present
+  register: ai_audit_install_lynis_pkg
+  until: ai_audit_install_lynis_pkg is success
+  retries: 3
+  delay: 5
+  when: ai_audit_security_tools.lynis.install_from_package | bool
+  become: true
+
+# Install Lynis - Git Method
+- name: lynis | Install git for Lynis installation
+  ansible.builtin.package:
+    name: git
+    state: present
+  register: ai_audit_install_git
+  until: ai_audit_install_git is success
+  retries: 3
+  delay: 5
+  when: 
+    - not ai_audit_security_tools.lynis.install_from_package | bool
+    - ansible_pkg_mgr != "unknown"
+  become: true
+
+- name: lynis | Create Lynis directory
+  ansible.builtin.file:
+    path: "{{ ai_audit_security_tools.lynis.git_dest }}"
+    state: directory
+    mode: '0755'
+  when: not ai_audit_security_tools.lynis.install_from_package | bool
+  become: true
+
+- name: lynis | Clone Lynis repository
+  ansible.builtin.git:
+    repo: "{{ ai_audit_security_tools.lynis.git_url }}"
+    dest: "{{ ai_audit_security_tools.lynis.git_dest }}"
+    depth: 1
+  environment: "{{ ai_audit_proxy_env | default({}) }}"
+  register: ai_audit_clone_lynis
+  when: not ai_audit_security_tools.lynis.install_from_package | bool
+  become: true
+
+# Run Lynis
+- name: lynis | Create Lynis command
+  ansible.builtin.set_fact:
+    ai_audit_lynis_cmd: >-
+      {% if ai_audit_security_tools.lynis.install_from_package | bool %}
+      lynis audit system {{ ai_audit_security_tools.lynis.options }}
+      {% else %}
+      {{ ai_audit_security_tools.lynis.git_dest }}/lynis audit system {{ ai_audit_security_tools.lynis.options }}
+      {% endif %}
+
+- name: lynis | Run Lynis audit
+  ansible.builtin.shell: "{{ ai_audit_lynis_cmd }} > {{ ai_audit_lynis_output }} 2>&1"
+  args:
+    executable: /bin/bash
+  register: ai_audit_lynis_run
+  changed_when: ai_audit_lynis_run.rc == 0 or ai_audit_lynis_run.rc == 64  # Lynis returns 64 when it finds warnings
+  failed_when: 
+    - ai_audit_lynis_run.rc != 0 
+    - ai_audit_lynis_run.rc != 64
+  become: true
+  no_log: true  # Don't log output as it may contain sensitive information
+
+- name: lynis | Check if Lynis output exists
+  ansible.builtin.stat:
+    path: "{{ ai_audit_lynis_output }}"
+  register: ai_audit_lynis_output_stat
+
+- name: lynis | Verify Lynis output
+  ansible.builtin.fail:
+    msg: "Lynis did not generate output file at {{ ai_audit_lynis_output }}"
+  when: not ai_audit_lynis_output_stat.stat.exists
+
+- name: lynis | Check if Lynis report exists
+  ansible.builtin.stat:
+    path: "{{ ai_audit_lynis_report }}"
+  register: ai_audit_lynis_report_stat
+
+- name: lynis | Generate Lynis report manually if missing
+  ansible.builtin.shell: |
+    grep "^warning\|^suggestion\|^[0-9][0-9][0-9][0-9]\|hardening index" {{ ai_audit_lynis_output }} > {{ ai_audit_lynis_report }}
+  args:
+    executable: /bin/bash
+  register: ai_audit_gen_lynis_report
+  when: not ai_audit_lynis_report_stat.stat.exists
+  changed_when: ai_audit_gen_lynis_report.rc == 0
+  become: true
+
+- name: lynis | Extract Lynis hardening index
+  ansible.builtin.shell: |
+    grep "Hardening index" {{ ai_audit_lynis_output }} | awk -F': ' '{print $2}' | awk '{print $1}'
+  args:
+    executable: /bin/bash
+  register: ai_audit_lynis_hardening_index
+  changed_when: false
+  become: true
+
+- name: lynis | Set Lynis hardening index fact
+  ansible.builtin.set_fact:
+    ai_audit_lynis_score: "{{ ai_audit_lynis_hardening_index.stdout }}"
+
+- name: lynis | Notify Lynis completed
+  ansible.builtin.debug:
+    msg: "Lynis scan completed for {{ inventory_hostname }} with hardening index: {{ ai_audit_lynis_score }}"

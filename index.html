@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Presoja varnosti strežnikov Linux z uporabo jezikovnih modelov</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/theme/dark.min.css">
+    <style>
+        /* .reveal h1, .reveal h2, .reveal h3 { } */
+        .reveal .slides section { text-align: left; }
+        .reveal .title-slide { text-align: center !important; }
+        .reveal code { color: #505050; }
+        .reveal .highlight { color: #ff6b6b; font-weight: bold; }
+        .reveal .success { color: #51cf66; }
+        .reveal .warning { color: #ffa726; }
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+
+             <section class="title-slide" data-background="tmpl/page-000.jpg" data-background-size="contain" data-background-position="center">
+            </section>
+
+            <!-- Naslovna stran -->
+            <section class="title-slide" data-background="tmpl/page-001.jpg" data-background-size="contain" data-background-position="center">
+                <div style="display: flex; justify-content: flex-end; align-items: center; height: 100vh;">
+                    <div style="text-align: right; width: 50%;">
+                        <h1>Presoja varnosti strežnikov Linux z uporabo jezikovnih modelov</h1>
+                        <p style="margin-top: 2em;">
+                            <small>Andraz Vrhovec, Koofr</small>
+                            <br>
+                            <small>NTK 2025</small>
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Uvod -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Kaj nas čaka?</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <ul style="width: 60%;">
+                        <li>Osnove LLM (Large Language Models)</li>
+                        <li>Varnostne ranljivosti v Linux konfiguraciji</li>
+                        <li>Kako LLM pomagajo pri analizi</li>
+                        <li>Praktični primeri in orodja</li>
+                        <li>Najboljše prakse in omejitve</li>
+                    </ul>
+                    <img src="img/bernie.jpg" alt="Bernie" style="width: 300px; height: auto; border-radius: 10px;">
+                </div>
+            </section>
+
+            <!-- LLM osnove -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Kaj so veliki jezikovni modeli (LLM-ji)?</h2>
+                <ul>
+                    <li><strong>Jezikovni modeli</strong> - razumejo in generirajo besedilo</li>
+                    <li><strong>Predhodno naučeni</strong> na velikih količinah besedil</li>
+                    <li><strong>Kontekstualno razumevanje</strong> - razumejo pomen v kontekstu</li>
+                    <li><strong>Vzorci in strukture</strong> - prepoznajo znane vzorce</li>
+                </ul>
+                <p style="margin-top: 1em;"><span class="highlight">Za varnost:</span> Lahko prepoznajo znane varnostne vzorce in anti-vzorce</p>
+            </section>
+
+            <!-- LLM prednosti za varnostno analizo -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Prednosti LLM za varnostno analizo</h2>
+                <ul>
+                    <li><strong>Prepoznavanje vzorcev</strong> - identificirajo znane ranljive konfiguracije</li>
+                    <li><strong>Kontekstualno razumevanje</strong> - razumejo odvisnosti med nastavitvami</li>
+                    <li><strong>Hitrost analize</strong> - obdelajo velike količine datotek v kratkem času</li>
+                    <li><strong>Raznolikost formatov</strong> - delajo z različnimi konfiguracijski formati</li>
+                    <li><strong>Razlaga in priporočila</strong> - ne samo odkrivajo, ampak tudi razlagajo probleme</li>
+                </ul>
+            </section>
+
+            <!-- Trenutni pristopi -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Tradicionalni pristopi vs. LLM</h2>
+                <div style="display: flex; justify-content: space-between;">
+                    <div style="width: 45%;">
+                        <h3 style="color: #ffa726;">Tradicionalni pristopi</h3>
+                        <ul>
+                            <li>Statična pravila</li>
+                            <li>Regex vzorci</li>
+                            <li>Vnaprej definirane preveritve</li>
+                            <li>Omejena prilagodljivost</li>
+                        </ul>
+                    </div>
+                    <div style="width: 45%;">
+                        <h3 style="color: #51cf66;">LLM pristop</h3>
+                        <ul>
+                            <li>Dinamično razumevanje</li>
+                            <li>Kontekstualna analiza</li>
+                            <li>Prilagodljive preveritve</li>
+                            <li>Naravnojezične razlage</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Linux konfiguracije -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Linux konfiguracijske datoteke</h2>
+                <h3>Nekaj primerov najpogosteje analiziranih datotek:</h3>
+                <ul>
+                    <li><code>/etc/ssh/sshd_config</code> - SSH konfiguracija</li>
+                    <li><code>/etc/sudoers</code> - Sudo privilegiji</li>
+                    <li><code>/etc/fstab</code> - Datotečni sistemi</li>
+                    <li><code>/etc/passwd</code>, <code>/etc/shadow</code> - Uporabniški računi</li>
+                    <li><code>/etc/cron*</code> - Načrtovane naloge</li>
+                    <li><code>/etc/nginx/nginx.conf</code> - Web strežnik</li>
+                    <li><code>/etc/apache2/apache2.conf</code> - Apache konfiguracija</li>
+                </ul>
+            </section>
+
+            <!-- Tipične ranljivosti -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Tipične varnostne ranljivosti</h2>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2em;">
+                    <div>
+                        <h3 style="color: #9e1616;">SSH konfiguracija</h3>
+                        <ul>
+                            <li>Root login omogočen</li>
+                            <li>Šibka autentifikacija</li>
+                            <li>Prevelike pravice</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 style="color: #9e1616;">Sudo pravice</h3>
+                        <ul>
+                            <li>NOPASSWD za kritične ukaze</li>
+                            <li>Preveliko uporabljanje wildcardov</li>
+                            <li>Neustrezne skupine</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 style="color: #9e1616;">Datotečni sistemi</h3>
+                        <ul>
+                            <li>Sticky bit, SUID in SGID</li>
+                            <li>Neustrezne pravice</li>
+                            <li>Nezaščitene priklopne točke (npr. /tmp brez noexec)</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 style="color: #9e1616;">Web strežniki</h3>
+                        <ul>
+                            <li>Napake v SSL/TLS konfiguraciji</li>
+                            <li>Odtekanje informacij (open dir)</li>
+                            <li>Neustrezne varnostne glave</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Kako LLM pomagajo -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Kako LLM pomagajo pri analizi?</h2>
+                <ol>
+                    <li><strong>Prepoznavanje konteksta</strong> - razumejo namen konfiguracije</li>
+                    <li><strong>Odkrivanje neskladij</strong> - primerjajo z najboljšimi praksami</li>
+                    <li><strong>Analiza odvisnosti</strong> - prepoznajo konflikte med nastavitvami</li>
+                    <li><strong>Prioritizacija</strong> - ocenijo resnost ranljivosti</li>
+                    <li><strong>Priporočila</strong> - predlagajo konkretne izboljšave</li>
+                </ol>
+                <p style="margin-top: 1em;"><span class="success">Rezultat:</span> Celovita analiza, ki presega osnovne sintaksne preveritve</p>
+            </section>
+
+            <!-- Praktični primer 1 -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Praktični primer: SSH konfiguracija</h2>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 2em;">
+                    <div style="width: 60%;">
+                        <h3>Problematična konfiguracija:</h3>
+                        <pre><code data-trim>
+# /etc/ssh/sshd_config
+PermitRootLogin yes
+PasswordAuthentication yes
+PubkeyAuthentication yes
+PermitEmptyPasswords yes
+X11Forwarding yes
+                        </code></pre>
+                        <div class="fragment">
+                            <h3 style="color: #ff6b6b;">LLM analiza:</h3>
+                            <ul>
+                                <li><span class="highlight">Kritično:</span> Root login omogočen</li>
+                                <li><span class="highlight">Visoko tveganje:</span> Prazna gesla dovoljena</li>
+                                <li><span class="warning">Srednje:</span> X11 forwarding lahko predstavlja tveganje</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div style="width: 35%;">
+                        <img src="img/ssh.png" alt="AI Audit SSH analiza" style="width: 100%; height: auto; border-radius: 10px; border: 2px solid #444;">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Praktični primer 2 -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Primer: Sudo konfiguracija</h2>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 2em;">
+                    <div style="width: 60%;">
+                        <h3>Nevarno nastavitev:</h3>
+                        <pre><code data-trim>
+# /etc/sudoers
+user1 ALL=(ALL) NOPASSWD: ALL
+%admin ALL=(ALL) NOPASSWD: /bin/*, /usr/bin/*
+user2 ALL=(ALL) NOPASSWD: /usr/bin/vim /etc/passwd
+                        </code></pre>
+                        <div class="fragment">
+                            <h3 style="color: #ff6b6b;">LLM prepozna:</h3>
+                            <ul>
+                                <li>Preširoke pravice za user1</li>
+                                <li>Nevarni wildcardi za admin skupino</li>
+                                <li>Vim lahko ureja sistemske datoteke</li>
+                                <li>Predlaga specifične ukaze namesto wildcard-ov</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div style="width: 35%;">
+                        <img src="img/sudo.png" alt="AI Audit Sudo analiza" style="width: 100%; height: auto; border-radius: 10px; border: 2px solid #444;">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Orodja in implementacija -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Orodja in implementacija</h2>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2em;">
+                    <div>
+                        <h3 style="color: #42affa;">API pristopi</h3>
+                        <ul>
+                            <li>OpenAI GPT</li>
+                            <li>Anthropic Claude</li>
+                            <li>Google Gemini</li>
+                            <li>Lokalni modeli (Ollama)</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 style="color: #42affa;">Implementacijske možnosti</h3>
+                        <ul>
+                            <li>Python skripta z API klici</li>
+                            <li>Integracija v CI/CD</li>
+                            <li>Samostojno orodje</li>
+                            <li>Web aplikacija</li>
+                            <li>Integracija z orodji za avtomatizacijo (Ansible)</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Praktični workflow -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Praktični workflow</h2>
+                <ol>
+                    <li><strong>Zbiranje datotek</strong> - avtomatsko prebiranje konfiguracij</li>
+                    <li><strong>Predprocesiranje</strong> - odstranitev občutljivih podatkov</li>
+                    <li><strong>LLM analiza</strong> - pošiljanje na analizo z ustreznimi pozivi
+                        <ul>
+                            <li><strong>Obdelava rezultatov</strong> - strukturiranje ugotovitev</li>
+                            <li><strong>Prioritizacija</strong> - razvrščanje po resnosti</li>
+                            <li><strong>Poročanje</strong> - generirane priporočila</li>
+                            <li><strong>Avtomatski popravki</strong> - samodejna priprava popravkov</li>
+                        </ul>
+                    </li>
+                </ol>
+            </section>
+
+            <!-- AI Audit Ansible Role - Pregled -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>AI Audit Ansible Role - Pregled</h2>
+                <p>Ansible vloga za avtomatsko varnostno presojo Linux strežnikov z uporabo AI</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2em;">
+                    <div>
+                        <h3 style="color: #42affa;">Sestavni deli:</h3>
+                        <ul>
+                            <li>Zbiranje sistemskih informacij</li>
+                            <li>Izvajanje varnostnih orodij (LinPEAS, Lynis, RKHunter)</li>
+                            <li>AI analiza z Google Gemini</li>
+                            <li>Generiranje poročil</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 style="color: #42affa;">Glavne naloge:</h3>
+                        <ul>
+                            <li><code>system_info.yml</code> - sistemske informacije</li>
+                            <li><code>linpeas.yml</code> - privilege escalation</li>
+                            <li><code>lynis.yml</code> - sistem audit</li>
+                            <li><code>analyze.yml</code> - AI analiza</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Kako deluje AI Audit -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Kako deluje AI Audit vloga</h2>
+                <ol>
+                    <li><strong>Priprava okolja</strong> - ustvarjanje direktorijev, preverjanje API ključa</li>
+                    <li><strong>Zbiranje podatkov</strong> - sistemske informacije, uporabniki, procesi, konfiguracije</li>
+                    <li><strong>Izvajanje varnostnih orodij:</strong>
+                        <ul>
+                            <li>LinPEAS - iskanje možnosti dviga privilegijev</li>
+                            <li>Lynis - celovit sistem audit</li>
+                            <li>RKHunter - preverjanje rootkit-ov</li>
+                        </ul>
+                    </li>
+                    <li><strong>AI analiza</strong> - Google Gemini analizira vse zbrane podatke</li>
+                    <li><strong>Poročanje</strong> - generirane Markdown poročila</li>
+                </ol>
+            </section>
+
+            <!-- Najboljše prakse -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Najboljše prakse</h2>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2em;">
+                    <div>
+                        <h3 style="color: #51cf66;">✓ Dobro</h3>
+                        <ul>
+                            <li>Strukturirani prompt-i</li>
+                            <li>Nastavitev nizke temperature (in top_k in top_p) za konsistentne rezultate</li>
+                            <li>Predprocesiranje občutljivih podatkov</li>
+                            <li>Kombinacija z tradicionalnimi orodji</li>
+                            <li>Validacija rezultatov</li>
+                            <li>Dokumentiranje ugotovitev</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 style="color: #ff6b6b;">✗ Izogibajte se</h3>
+                        <ul>
+                            <li>Slepo zaupanje rezultatom</li>
+                            <li>Pošiljanje občutljivih podatkov</li>
+                            <li>Zanemarjanje konteksta</li>
+                            <li>Avtomatsko implementiranje sprememb</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Omejitve -->
+            <section data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Omejitve LLM pristopa</h2>
+                <ul>
+                    <li><strong>Zasebnost podatkov</strong> - potencialno pošiljanje na zunanje API-je</li>
+                    <li><strong>Kontekstualne omejitve</strong> - modeli imajo omejitve velikosti vhodnih podatkov</li>
+                    <li><strong>Haliucinacije</strong> - možnost napačnih ali izmišljenih ugotovitev</li>
+                    <li><strong>Stroški</strong> - API klici lahko postanejo dragi pri velikih volumnih</li>
+                    <li><strong>Odvisnost od interneta</strong> - za API klice je potrebna povezava</li>
+                </ul>
+                <p style="margin-top: 1em;"><span class="warning">Opozorilo:</span> Vedno validirajte rezultate z drugo analizo oz. "na roke"</p>
+            </section>
+
+            <!-- Zaključek -->
+            <section class="title-slide" data-background="tmpl/page-011.jpg" data-background-size="cover" data-background-position="center">
+                <h2>Zaključek</h2>
+                <ul>
+                    <li>LLM predstavljajo močno orodje za varnostno analizo</li>
+                    <li>Najbolje delujejo v kombinaciji s tradicionalnimi pristopi</li>
+                    <li>Pomembno je razumevanje omejitev in tveganj</li>
+                </ul>
+                <p style="margin-top: 2em; text-align: center;">
+                    <span class="success">Hvala za pozornost!</span>
+                </p>
+            </section>
+
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reveal.min.js"></script>
+    <script>
+        Reveal.initialize({
+            hash: true,
+            controls: true,
+            progress: true,
+            center: true,
+            transition: 'slide'
+        });
+    </script>
+</body>
+</html>

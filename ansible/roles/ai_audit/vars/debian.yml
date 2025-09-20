@@ -1,0 +1,12 @@
+---
+# roles/ai_audit/vars/debian.yml
+
+# Package names for Debian-based systems
+ai_audit_lynis_package_name: lynis
+ai_audit_rkhunter_package_name: rkhunter
+
+# Package manager command for update
+ai_audit_pkg_update_cmd: apt-get update
+
+# System-specific paths
+ai_audit_system_audit_log: /var/log/audit/audit.log
