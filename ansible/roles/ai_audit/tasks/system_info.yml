@@ -12,19 +12,22 @@
     mode: '0750'
 
 - name: Collect hostname information
-  ansible.builtin.shell: "echo 'HOSTNAME: $(hostname)' > {{ ai_audit_system_info_file }}"
+  ansible.builtin.shell: |
+    echo "HOSTNAME: $(hostname)" > {{ ai_audit_system_info_file }}
   args:
     executable: /bin/bash
   changed_when: false
 
 - name: Collect kernel information
-  ansible.builtin.shell: "echo 'KERNEL: $(uname -a)' >> {{ ai_audit_system_info_file }}"
+  ansible.builtin.shell: |
+    echo "KERNEL: $(uname -a)" >> {{ ai_audit_system_info_file }}
   args:
     executable: /bin/bash
   changed_when: false
 
 - name: Collect OS version
-  ansible.builtin.shell: "echo 'OS VERSION: $(cat /etc/os-release | grep PRETTY_NAME | cut -d \"=\" -f 2 | tr -d \"\\\"\" )' >> {{ ai_audit_system_info_file }}"
+  ansible.builtin.shell: |
+    . /etc/os-release && printf 'OS VERSION: %s\n' "$PRETTY_NAME" >> {{ ai_audit_system_info_file }}
   args:
     executable: /bin/bash
   changed_when: false
